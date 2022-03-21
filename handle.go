@@ -2,38 +2,26 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
-	"path"
+	"os/exec"
 	"strings"
 
 	"github.com/intob/shilo/ffmpeg"
 )
 
-type contentType struct {
-	mimeType string
-	boundary string
-}
-
-type data struct {
-	fileName string
-	content  *bytes.Buffer
-	outType  string
-	width    int
-	height   int
-}
-
 func handle(w http.ResponseWriter, r *http.Request) {
-	data, err := parseData(r)
+	data, err := parseRequest(r)
 	if err != nil {
 		log.Println("error parsing data:", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-
-	ext := path.Ext(data.fileName)
-	tmp, err := writeTempFile(data.content, "shilo*"+ext)
+	tmp, err := writeTempFile(data.content, "shilo*"+data.contentExt)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -43,13 +31,19 @@ func handle(w http.ResponseWriter, r *http.Request) {
 	defer log.Println("removed", tmp.Name())
 	log.Println("created", in)
 
-	out := strings.Replace(in, ext, "_out."+data.outType, 1)
+	out := strings.Replace(in, data.contentExt, "_out"+data.outExt, 1)
 	defer os.Remove(out)
 	defer log.Println("removed", out)
 
-	cmd := ffmpeg.Scale(in, out, data.width, data.height)
-	cmd.Stdout = os.Stdout //io.MultiWriter(logW, os.Stdout)
-	cmd.Stderr = os.Stdout //io.MultiWriter(logW, os.Stdout)
+	cmd := ffmpeg.Scale(in, out, data.outRes)
+	progW, err := getProgressWriters(cmd, data)
+	if err != nil {
+		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	cmd.Stdout = progW
+	cmd.Stderr = progW
 
 	err = cmd.Start()
 	if err != nil {
@@ -83,4 +77,17 @@ func writeTempFile(content *bytes.Buffer, pattern string) (*os.File, error) {
 	}
 
 	return tmp, nil
+}
+
+func getProgressWriters(cmd *exec.Cmd, data *data) (io.Writer, error) {
+	if data.progressAddr == "" {
+		return os.Stdout, nil
+	}
+	// try to connect to progress socket
+	c, err := net.Dial("tcp", data.progressAddr)
+	if err != nil {
+		err = errors.New("failed to connect to progress socket:" + err.Error())
+		return os.Stdout, err
+	}
+	return io.MultiWriter(c, os.Stdout), nil
 }
