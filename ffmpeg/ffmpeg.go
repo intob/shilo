@@ -1,13 +1,13 @@
 package ffmpeg
 
 import (
-	"fmt"
+	"context"
 	"os/exec"
 )
 
-func Scale(in, out, outRes string) *exec.Cmd {
-	scale := fmt.Sprintf("scale=%s", outRes)
-	cmd := exec.Command("ffmpeg",
+func Scale(ctx context.Context, in, out, outRes string) *exec.Cmd {
+	scale := "scale=" + outRes
+	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-i", in,
 		"-vf", scale,
 		out)

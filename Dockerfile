@@ -45,7 +45,6 @@ RUN apk update && apk add ffmpeg
 COPY --from=builder /go/bin/shilo /etc/shilo
 
 ENV PORT "9000"
-
-EXPOSE $PORT
+EXPOSE 9000
 
 ENTRYPOINT ["/etc/shilo"]

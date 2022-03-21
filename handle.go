@@ -28,19 +28,22 @@ func handle(w http.ResponseWriter, r *http.Request) {
 	}
 	in := tmp.Name()
 	defer os.Remove(in)
-	defer log.Println("removed", tmp.Name())
+	defer log.Println("removed", in)
 	log.Println("created", in)
 
 	out := strings.Replace(in, data.contentExt, "_out"+data.outExt, 1)
 	defer os.Remove(out)
 	defer log.Println("removed", out)
 
-	cmd := ffmpeg.Scale(in, out, data.outRes)
-	progW, err := getProgressWriters(cmd, data)
+	cmd := ffmpeg.Scale(r.Context(), in, out, data.outRes)
+	progW, conn, err := getProgressWriters(cmd, data)
 	if err != nil {
 		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
+	}
+	if conn != nil {
+		defer conn.Close()
 	}
 	cmd.Stdout = progW
 	cmd.Stderr = progW
@@ -79,15 +82,15 @@ func writeTempFile(content *bytes.Buffer, pattern string) (*os.File, error) {
 	return tmp, nil
 }
 
-func getProgressWriters(cmd *exec.Cmd, data *data) (io.Writer, error) {
+func getProgressWriters(cmd *exec.Cmd, data *data) (io.Writer, net.Conn, error) {
 	if data.progressAddr == "" {
-		return os.Stdout, nil
+		return os.Stdout, nil, nil
 	}
 	// try to connect to progress socket
 	c, err := net.Dial("tcp", data.progressAddr)
 	if err != nil {
 		err = errors.New("failed to connect to progress socket:" + err.Error())
-		return os.Stdout, err
+		return os.Stdout, nil, err
 	}
-	return io.MultiWriter(c, os.Stdout), nil
+	return io.MultiWriter(c, os.Stdout), c, nil
 }

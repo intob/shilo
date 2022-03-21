@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 )
 
@@ -24,6 +25,10 @@ func parseRequest(r *http.Request) (*data, error) {
 		outExt:       r.Header.Get("x-out-ext"),
 		outRes:       r.Header.Get("x-out-res"),
 		progressAddr: r.Header.Get("x-progress-addr"),
+	}
+
+	if d.contentExt == "" || d.outExt == "" || d.outRes == "" {
+		return nil, errors.New("missing arguments (some of); x-int-ext, x-out-ext, x-out-res")
 	}
 
 	return d, nil
