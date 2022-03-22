@@ -57,10 +57,11 @@ func handle(w http.ResponseWriter, r *http.Request) {
 
 	err = cmd.Wait()
 	if err != nil {
-		log.Println("ffmpeg failed:", err)
+		progW.Write([]byte("ffmpeg failed:" + err.Error()))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	progW.Write([]byte("\r\nffmpeg done\r\n"))
 
 	http.ServeFile(w, r, out)
 }
